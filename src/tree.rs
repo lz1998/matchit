@@ -105,7 +105,7 @@ impl<T> Node<T> {
                 }
 
                 // not a wildcard and there is no matching child node, create a new one
-                if !matches!(next, b':' | b'*') && current.node_type != NodeType::CatchAll {
+                if !matches!(next, b'{') && current.node_type != NodeType::CatchAll {
                     current.indices.push(next);
                     let mut child = current.add_child(Node::default());
                     child = current.update_child_priority(child);
@@ -217,7 +217,7 @@ impl<T> Node<T> {
             }
 
             // regular route parameter
-            if wildcard[0] == b':' {
+            if wildcard[1] != b'*' {
                 // insert prefix before the current wildcard
                 if wildcard_index > 0 {
                     current.prefix = prefix[..wildcard_index].to_owned();
@@ -239,12 +239,10 @@ impl<T> Node<T> {
                 // will be another non-wildcard subroute starting with '/'
                 if wildcard.len() < prefix.len() {
                     prefix = &prefix[wildcard.len()..];
-                    let child = Self {
-                        priority: 1,
-                        ..Self::default()
-                    };
 
-                    let child = current.add_child(child);
+                    current.indices.push(prefix[0]);
+                    let mut child = current.add_child(Node::default());
+                    child = current.update_child_priority(child);
                     current = &mut current.children[child];
                     continue;
                 }
@@ -254,7 +252,7 @@ impl<T> Node<T> {
                 return Ok(());
 
             // catch-all route
-            } else if wildcard[0] == b'*' {
+            } else {
                 // "/foo/*x/bar"
                 if wildcard_index + wildcard.len() != prefix.len() {
                     return Err(InsertError::InvalidCatchAll);
@@ -383,51 +381,84 @@ impl<T> Node<T> {
 
                     match current.node_type {
                         NodeType::Param => {
-                            // check if there are more segments in the path other than this parameter
-                            match path.iter().position(|&c| c == b'/') {
-                                Some(i) => {
-                                    let (param, rest) = path.split_at(i);
+                            for (i, &c) in current.indices.iter().enumerate() {
+                                if let Some(j) = path.iter().position(|&b| b == c) {
+                                    let (param, rest) = path.split_at(j);
 
-                                    if let [child] = current.children.as_slice() {
-                                        // store the parameter value
-                                        params.push(&current.prefix[1..], param);
-
-                                        // continue with the child node
-                                        path = rest;
-                                        current = child;
-                                        backtracking = false;
-                                        continue 'walk;
-                                    }
-
-                                    // try backtracking
-                                    try_backtrack!();
-
-                                    return Err(MatchError::NotFound);
-                                }
-                                // this is the last path segment
-                                None => {
                                     // store the parameter value
-                                    params.push(&current.prefix[1..], path);
+                                    params
+                                        .push(&current.prefix[1..current.prefix.len() - 1], param);
 
-                                    // found the matching value
-                                    if let Some(ref value) = current.value {
-                                        return Ok((value, params));
-                                    }
-
-                                    // no match, try backtracking
-                                    try_backtrack!();
-
-                                    // this node doesn't have the value, no match
-                                    return Err(MatchError::NotFound);
+                                    // continue with the child node
+                                    path = rest;
+                                    current = &current.children[i];
+                                    backtracking = false;
+                                    continue 'walk;
                                 }
                             }
+
+                            // store the parameter value
+                            params.push(&current.prefix[1..current.prefix.len() - 1], path);
+
+                            // found the matching value
+                            if let Some(ref value) = current.value {
+                                return Ok((value, params));
+                            }
+
+                            // no match, try backtracking
+                            try_backtrack!();
+
+                            // this node doesn't have the value, no match
+                            return Err(MatchError::NotFound);
+
+                            // // check if there are more segments in the path other than this parameter
+                            // match path.iter().position(|&c| c == b'/') {
+                            //     Some(i) => {
+                            //         let (param, rest) = path.split_at(i);
+
+                            //         if let [child] = current.children.as_slice() {
+                            //             // store the parameter value
+                            //             params.push(
+                            //                 &current.prefix[1..current.prefix.len() - 1],
+                            //                 param,
+                            //             );
+
+                            //             // continue with the child node
+                            //             path = rest;
+                            //             current = child;
+                            //             backtracking = false;
+                            //             continue 'walk;
+                            //         }
+
+                            //         // try backtracking
+                            //         try_backtrack!();
+
+                            //         return Err(MatchError::NotFound);
+                            //     }
+                            //     // this is the last path segment
+                            //     None => {
+                            //         // store the parameter value
+                            //         params.push(&current.prefix[1..current.prefix.len() - 1], path);
+
+                            //         // found the matching value
+                            //         if let Some(ref value) = current.value {
+                            //             return Ok((value, params));
+                            //         }
+
+                            //         // no match, try backtracking
+                            //         try_backtrack!();
+
+                            //         // this node doesn't have the value, no match
+                            //         return Err(MatchError::NotFound);
+                            //     }
+                            // }
                         }
                         NodeType::CatchAll => {
                             // catch all segments are only allowed at the end of the route,
                             // either this node has the value or there is no match
                             return match current.value {
                                 Some(ref value) => {
-                                    params.push(&current.prefix[1..], path);
+                                    params.push(&current.prefix[2..current.prefix.len() - 1], path);
                                     Ok((value, params))
                                 }
                                 None => Err(MatchError::NotFound),
@@ -480,17 +511,17 @@ impl<T> Node<T> {
 fn find_wildcard(path: &[u8]) -> (Option<(&[u8], usize)>, bool) {
     for (start, &c) in path.iter().enumerate() {
         // a wildcard starts with ':' (param) or '*' (catch-all)
-        if c != b':' && c != b'*' {
+        if c != b'{' {
             continue;
         }
 
         // find end and check for invalid characters
         let mut valid = true;
 
-        for (end, &c) in path[start + 1..].iter().enumerate() {
+        for (end, &c) in path[start..].iter().enumerate().skip(2) {
             match c {
-                b'/' => return (Some((&path[start..start + 1 + end], start)), valid),
-                b':' | b'*' => valid = false,
+                b'}' => return (Some((&path[start..=start + end], start)), valid),
+                b'*' | b'/' => valid = false,
                 _ => {}
             }
         }
@@ -542,28 +573,28 @@ impl<T> Default for Node<T> {
 }
 
 // visualize the tree structure when debugging
-#[cfg(test)]
-const _: () = {
-    use std::fmt::{self, Debug, Formatter};
+//#[cfg(test)]
+//const _: () = {
+use std::fmt::{self, Debug, Formatter};
 
-    impl<T: Debug> Debug for Node<T> {
-        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-            // safety: we only expose &mut T through &mut self
-            let value = unsafe { self.value.as_ref().map(|x| &*x.get()) };
+impl<T: Debug> Debug for Node<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        // safety: we only expose &mut T through &mut self
+        let value = unsafe { self.value.as_ref().map(|x| &*x.get()) };
 
-            let indices = self
-                .indices
-                .iter()
-                .map(|&x| char::from_u32(x as _))
-                .collect::<Vec<_>>();
+        let indices = self
+            .indices
+            .iter()
+            .map(|&x| char::from_u32(x as _))
+            .collect::<Vec<_>>();
 
-            let mut fmt = f.debug_struct("Node");
-            fmt.field("value", &value);
-            fmt.field("prefix", &std::str::from_utf8(&self.prefix));
-            fmt.field("node_type", &self.node_type);
-            fmt.field("children", &self.children);
-            fmt.field("indices", &indices);
-            fmt.finish()
-        }
+        let mut fmt = f.debug_struct("Node");
+        fmt.field("value", &value);
+        fmt.field("prefix", &std::str::from_utf8(&self.prefix));
+        fmt.field("node_type", &self.node_type);
+        fmt.field("children", &self.children);
+        fmt.field("indices", &indices);
+        fmt.finish()
     }
-};
+}
+//};

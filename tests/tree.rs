@@ -1,6 +1,16 @@
 use matchit::{InsertError, MatchError, Router};
 
 #[test]
+fn foo() {
+    let mut x = Router::new();
+    x.insert("/{foo}.{bar}", "foo").unwrap();
+    dbg!(x.at("/foo.bar").unwrap());
+    // x.insert("/bar/{*foo}", "foo").unwrap();
+    // dbg!(x.at("/bar").unwrap());
+    // dbg!(x.at("/bar/foo/a/b/c/").unwrap());
+}
+
+#[test]
 fn issue_22() {
     let mut x = Router::new();
     x.insert("/foo_bar", "Welcome!").unwrap();

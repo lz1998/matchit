@@ -1,9 +1,10 @@
+use core::fmt;
 use std::iter;
 use std::mem;
 use std::slice;
 
 /// A single URL parameter, consisting of a key and a value.
-#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Default, Copy, Clone)]
+#[derive(PartialEq, Eq, Ord, PartialOrd, Default, Copy, Clone)]
 struct Param<'k, 'v> {
     key: &'k [u8],
     value: &'v [u8],
@@ -39,7 +40,7 @@ impl<'k, 'v> Param<'k, 'v> {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Clone)]
+#[derive(PartialEq, Eq, Ord, PartialOrd, Clone)]
 pub struct Params<'k, 'v> {
     kind: ParamsKind<'k, 'v>,
 }
@@ -47,7 +48,7 @@ pub struct Params<'k, 'v> {
 // most routes have 1-3 dynamic parameters, so we can avoid a heap allocation in common cases.
 const SMALL: usize = 3;
 
-#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Clone)]
+#[derive(PartialEq, Eq, Ord, PartialOrd, Clone)]
 enum ParamsKind<'k, 'v> {
     None,
     Small([Param<'k, 'v>; SMALL], usize),
@@ -56,8 +57,9 @@ enum ParamsKind<'k, 'v> {
 
 impl<'k, 'v> Params<'k, 'v> {
     pub(crate) fn new() -> Self {
-        let kind = ParamsKind::None;
-        Self { kind }
+        Self {
+            kind: ParamsKind::None,
+        }
     }
 
     /// Returns the number of parameters.
@@ -141,6 +143,12 @@ impl<'k, 'v> Params<'k, 'v> {
     }
 }
 
+impl fmt::Debug for Params<'_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
 /// An iterator over the keys and values of a route's [parameters](crate::Params).
 pub struct ParamsIter<'ps, 'k, 'v> {
     kind: ParamsIterKind<'ps, 'k, 'v>,
@@ -182,11 +190,6 @@ impl<'ps, 'k, 'v> Iterator for ParamsIter<'ps, 'k, 'v> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn no_alloc() {
-        assert_eq!(Params::new().kind, ParamsKind::None);
-    }
 
     #[test]
     fn heap_alloc() {
