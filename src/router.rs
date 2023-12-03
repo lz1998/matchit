@@ -1,5 +1,6 @@
 use crate::tree::Node;
 use crate::{InsertError, MatchError, Params};
+use alloc::string::String;
 
 /// A URL router.
 ///

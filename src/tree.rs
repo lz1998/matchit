@@ -1,8 +1,12 @@
 use crate::{InsertError, MatchError, Params};
+use alloc::borrow::ToOwned;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 
-use std::cell::UnsafeCell;
-use std::cmp::min;
-use std::mem;
+use core::cell::UnsafeCell;
+use core::cmp::min;
+use core::mem;
 
 /// The types of nodes the tree can hold
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone)]

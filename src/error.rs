@@ -1,6 +1,8 @@
+use crate::alloc::borrow::ToOwned;
 use crate::tree::{denormalize_params, Node};
+use alloc::string::String;
 
-use std::fmt;
+use core::fmt;
 
 /// Represents errors that can occur when inserting a new route.
 #[non_exhaustive]
@@ -38,8 +40,6 @@ impl fmt::Display for InsertError {
         }
     }
 }
-
-impl std::error::Error for InsertError {}
 
 impl InsertError {
     pub(crate) fn conflict<T>(route: &[u8], prefix: &[u8], current: &Node<T>) -> Self {
@@ -133,5 +133,3 @@ impl fmt::Display for MatchError {
         write!(f, "{}", msg)
     }
 }
-
-impl std::error::Error for MatchError {}

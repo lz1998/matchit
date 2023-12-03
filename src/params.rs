@@ -1,7 +1,8 @@
-use std::iter;
-use std::mem;
-use std::slice;
-
+use alloc::str;
+use alloc::vec::Vec;
+use core::iter;
+use core::mem;
+use core::slice;
 /// A single URL parameter, consisting of a key and a value.
 #[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Default, Copy, Clone)]
 struct Param<'k, 'v> {
@@ -12,11 +13,11 @@ struct Param<'k, 'v> {
 impl<'k, 'v> Param<'k, 'v> {
     // this could be from_utf8_unchecked, but we'll keep this safe for now
     fn key_str(&self) -> &'k str {
-        std::str::from_utf8(self.key).unwrap()
+        str::from_utf8(self.key).unwrap()
     }
 
     fn value_str(&self) -> &'v str {
-        std::str::from_utf8(self.value).unwrap()
+        str::from_utf8(self.value).unwrap()
     }
 }
 
